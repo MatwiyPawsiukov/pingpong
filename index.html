@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Pong Game</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: linear-gradient(45deg, #1a1a1a, #2a2a2a);
+            color: white;
+            font-family: Arial, sans-serif;
+            min-height: 100vh;
+        }
+
+        canvas {
+            background: #000;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+            margin: 20px;
+        }
+
+        .score {
+            font-size: 3em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            margin: 10px;
+        }
+
+        .difficulty {
+            margin: 20px;
+            padding: 10px 20px;
+            font-size: 1.2em;
+            border-radius: 5px;
+            background: #444;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        .dialog {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.5);
+            border: 2px solid #0ff;
+        }
+
+        .dialog button {
+            padding: 10px 20px;
+            font-size: 1.2em;
+            background: #0ff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 15px;
+        }
+
+        .particle {
+            position: absolute;
+            pointer-events: none;
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+    <select class="difficulty" id="difficulty">
+        <option value="easy">Легкий</option>
+        <option value="medium">Середній</option>
+        <option value="hard">Важкий</option>
+    </select>
+    <div class="score">
+        <span id="playerScore">0</span> - <span id="computerScore">0</span>
+    </div>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+    <div class="dialog" id="dialog">
+        <h2 id="winnerText"></h2>
+        <button onclick="restartGame()">Грати знову</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const difficultySelect = document.getElementById('difficulty');
+        
+        let playerScore = 0;
+        let computerScore = 0;
+        let gameRunning = true;
+        
+        const paddleHeight = 100;
+        const paddleWidth = 10;
+        const ballSize = 10;
+        
+        let playerY = 160;
+        let computerY = 160;
+        let ball = {
+            x: 400,
+            y: 200,
+            speedX: 4,
+            speedY: 4
+        };
+        
+        let computerSpeed;
+        setDifficulty();
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            playerY = e.clientY - rect.top - paddleHeight/2;
+            playerY = Math.max(0, Math.min(canvas.height - paddleHeight, playerY));
+        });
+
+        difficultySelect.addEventListener('change', setDifficulty);
+
+        function setDifficulty() {
+            const difficulty = difficultySelect.value;
+            computerSpeed = difficulty === 'easy' ? 3 : difficulty === 'medium' ? 5 : 7;
+        }
+
+        function createParticles(x, y) {
+            for(let i = 0; i < 100; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                document.body.appendChild(particle);
+                
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 10 + 5;
+                const size = Math.random() * 4 + 2;
+                
+                particle.style.width = size + 'px';
+                particle.style.height = size + 'px';
+                particle.style.left = x + 'px';
+                particle.style.top = y + 'px';
+                
+                const vx = Math.cos(angle) * speed;
+                const vy = Math.sin(angle) * speed;
+                
+                requestAnimationFrame(function animate() {
+                    const x = parseFloat(particle.style.left) + vx;
+                    const y = parseFloat(particle.style.top) + vy;
+                    particle.style.opacity = parseFloat(particle.style.opacity || 1) - 0.02;
+                    
+                    particle.style.left = x + 'px';
+                    particle.style.top = y + 'px';
+                    
+                    if(parseFloat(particle.style.opacity) > 0) {
+                        requestAnimationFrame(animate);
+                    } else {
+                        particle.remove();
+                    }
+                });
+            }
+        }
+
+        function update() {
+            if(!gameRunning) return;
+
+            // Рух комп'ютера
+            const computerCenter = computerY + paddleHeight/2;
+            if(computerCenter < ball.y - 35) computerY += computerSpeed;
+            if(computerCenter > ball.y + 35) computerY -= computerSpeed;
+            computerY = Math.max(0, Math.min(canvas.height - paddleHeight, computerY));
+
+            // Рух м'яча
+            ball.x += ball.speedX;
+            ball.y += ball.speedY;
+
+            // Перевірка pinch ефекту
+            const touchingFloor = ball.y + ballSize >= canvas.height;
+            const touchingCeiling = ball.y - ballSize <= 0;
+
+            const touchingPlayer = (
+                ball.speedX < 0 &&
+                ball.x - ballSize <= paddleWidth + 10 &&
+                ball.y + ballSize >= playerY &&
+                ball.y - ballSize <= playerY + paddleHeight
+            );
+
+            const touchingComputer = (
+                ball.speedX > 0 &&
+                ball.x + ballSize >= canvas.width - paddleWidth - 10 &&
+                ball.y + ballSize >= computerY &&
+                ball.y - ballSize <= computerY + paddleHeight
+            );
+
+            if (touchingPlayer && touchingFloor) {
+                ball.speedX = 10;
+                ball.speedY = -10;
+            }
+
+            if (touchingComputer && touchingCeiling) {
+                ball.speedX = -10;
+                ball.speedY = 10;
+            }
+
+            // Відбивання від стелі/підлоги
+            if (ball.y - ballSize <= 0) {
+                ball.y = ballSize;
+                ball.speedY *= -1;
+            }
+
+            if (ball.y + ballSize >= canvas.height) {
+                ball.y = canvas.height - ballSize;
+                ball.speedY *= -1;
+            }
+
+            // Відбивання від ракеток
+            if (touchingPlayer && !touchingFloor) {
+                ball.x = paddleWidth + 10 + ballSize;
+                ball.speedX *= -1.05;
+                ball.speedY = (ball.y - (playerY + paddleHeight / 2)) * 0.15;
+            }
+
+            if (touchingComputer && !touchingCeiling) {
+                ball.x = canvas.width - paddleWidth - 10 - ballSize;
+                ball.speedX *= -1.05;
+                ball.speedY = (ball.y - (computerY + paddleHeight / 2)) * 0.15;
+            }
+
+            // Голи
+            if (ball.x - ballSize <= 0) {
+                computerScore++;
+                document.getElementById('computerScore').textContent = computerScore;
+                resetBall();
+            }
+
+            if (ball.x + ballSize >= canvas.width) {
+                playerScore++;
+                document.getElementById('playerScore').textContent = playerScore;
+                resetBall();
+            }
+
+            // Кінець гри
+            if(playerScore >= 5 || computerScore >= 5) {
+                gameRunning = false;
+                showWinner();
+                createParticles(canvas.width/2, canvas.height/2);
+            }
+        }
+
+        function draw() {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#0ff';
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = '#0ff';
+            ctx.fillRect(0, playerY, paddleWidth, paddleHeight);
+            ctx.fillRect(canvas.width - paddleWidth, computerY, paddleWidth, paddleHeight);
+
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ballSize, 0, Math.PI * 2);
+            ctx.fillStyle = '#ff0';
+            ctx.shadowColor = '#ff0';
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            ctx.setLineDash([5, 15]);
+            ctx.beginPath();
+            ctx.moveTo(canvas.width/2, 0);
+            ctx.lineTo(canvas.width/2, canvas.height);
+            ctx.strokeStyle = '#fff';
+            ctx.stroke();
+        }
+
+        function resetBall() {
+            ball.x = canvas.width/2;
+            ball.y = canvas.height/2;
+            ball.speedX = 4 * (Math.random() > 0.5 ? 1 : -1);
+            ball.speedY = 4 * (Math.random() * 2 - 1);
+        }
+
+        function showWinner() {
+            const dialog = document.getElementById('dialog');
+            const winnerText = document.getElementById('winnerText');
+            winnerText.textContent = playerScore >= 5 ? "Ви перемогли! 🎉" : "Комп'ютер переміг 😢";
+            dialog.style.display = 'block';
+        }
+
+        function restartGame() {
+            playerScore = 0;
+            computerScore = 0;
+            document.getElementById('playerScore').textContent = '0';
+            document.getElementById('computerScore').textContent = '0';
+            document.getElementById('dialog').style.display = 'none';
+            resetBall();
+            gameRunning = true;
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        resetBall();
+        gameLoop();
+    </script>
+</body>
+</html>
